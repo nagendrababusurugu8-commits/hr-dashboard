@@ -1,27 +1,91 @@
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, Legend
 } from "recharts";
 
-const departmentData = [
-  { name: "Sales", employees: 850 },
-  { name: "IT", employees: 720 },
-  { name: "HR", employees: 420 },
-  { name: "Finance", employees: 610 },
-  { name: "Operations", employees: 800 }
-];
-
-const attritionData = [
-  { name: "Active", value: 1676 },
-  { name: "Attrition", value: 1724 }
-];
-
+const API = "https://hr-dashboard-fsan.onrender.com";
 const COLORS = ["#2563EB", "#F97316"];
 
 function App() {
+  const [summary, setSummary] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [file, setFile] = useState(null);
+
+  async function loadDashboard() {
+    setLoading(true);
+    setMessage("");
+
+    try {
+      const [summaryResponse, departmentResponse] = await Promise.all([
+        fetch(`${API}/summary`),
+        fetch(`${API}/departments`)
+      ]);
+
+      if (!summaryResponse.ok || !departmentResponse.ok) {
+        throw new Error("Please upload the HR CSV file first.");
+      }
+
+      const summaryData = await summaryResponse.json();
+      const departmentData = await departmentResponse.json();
+
+      setSummary(summaryData);
+      setDepartments(departmentData);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function uploadCSV() {
+    if (!file) {
+      setMessage("Please select a CSV file.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setLoading(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`${API}/upload`, {
+        method: "POST",
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || "Upload failed.");
+      }
+
+      setMessage("CSV uploaded successfully!");
+      await loadDashboard();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const attritionData = summary
+    ? [
+        { name: "Active", value: summary.total_employees - summary.attrition },
+        { name: "Attrition", value: summary.attrition }
+      ]
+    : [];
+
   return (
     <div className="dashboard">
       <header className="header">
@@ -32,88 +96,99 @@ function App() {
         <div className="header-tag">HR ANALYTICS</div>
       </header>
 
-      <section className="filters">
+      <section className="upload-card">
         <div>
-          <label>Department</label>
-          <select><option>All Departments</option></select>
+          <h3>Upload HR Dataset</h3>
+          <p>Select your HR CSV file to refresh the dashboard.</p>
         </div>
-        <div>
-          <label>Gender</label>
-          <select><option>All Genders</option></select>
-        </div>
-        <div>
-          <label>Attrition</label>
-          <select><option>All</option></select>
-        </div>
-        <div>
-          <label>Job Role</label>
-          <select><option>All Job Roles</option></select>
-        </div>
+        <input
+          type="file"
+          accept=".csv"
+          onChange={(e) => setFile(e.target.files[0])}
+        />
+        <button onClick={uploadCSV} disabled={loading}>
+          {loading ? "Please wait..." : "Upload CSV"}
+        </button>
+        <button className="refresh-button" onClick={loadDashboard}>
+          Refresh
+        </button>
+        {message && <p className="message">{message}</p>}
       </section>
 
-      <section className="kpi-grid">
-        <div className="kpi-card blue">
-          <p>Total Employees</p>
-          <h2>3,400</h2>
-          <span>Workforce size</span>
-        </div>
-        <div className="kpi-card orange">
-          <p>Total Attrition</p>
-          <h2>1,724</h2>
-          <span>Employees left</span>
-        </div>
-        <div className="kpi-card purple">
-          <p>Attrition Rate</p>
-          <h2>50.7%</h2>
-          <span>Employee turnover</span>
-        </div>
-        <div className="kpi-card green">
-          <p>Average Income</p>
-          <h2>5,125</h2>
-          <span>Monthly income</span>
-        </div>
-      </section>
+      {loading && !summary && <p>Loading dashboard...</p>}
 
-      <section className="charts-grid">
-        <div className="chart-card">
-          <h3>Employees by Department</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={departmentData}>
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="employees" fill="#3B82F6" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      {summary && (
+        <>
+          <section className="kpi-grid">
+            <div className="kpi-card blue">
+              <p>Total Employees</p>
+              <h2>{summary.total_employees.toLocaleString("en-IN")}</h2>
+              <span>Workforce size</span>
+            </div>
 
-        <div className="chart-card">
-          <h3>Employee Attrition</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={attritionData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={95}
-                label
-              >
-                {attritionData.map((entry, index) => (
-                  <Cell key={entry.name} fill={COLORS[index]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+            <div className="kpi-card orange">
+              <p>Total Attrition</p>
+              <h2>{summary.attrition.toLocaleString("en-IN")}</h2>
+              <span>Employees left</span>
+            </div>
 
-      <footer>
-        HR Analytics Dashboard | React + FastAPI
-      </footer>
+            <div className="kpi-card purple">
+              <p>Attrition Rate</p>
+              <h2>{summary.attrition_rate}%</h2>
+              <span>Employee turnover</span>
+            </div>
+
+            <div className="kpi-card green">
+              <p>Average Income</p>
+              <h2>{summary.average_income.toLocaleString("en-IN")}</h2>
+              <span>Monthly income</span>
+            </div>
+          </section>
+
+          <section className="charts-grid">
+            <div className="chart-card">
+              <h3>Employees by Department</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={departments}>
+                  <XAxis dataKey="department" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar
+                    dataKey="employees"
+                    fill="#3B82F6"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="chart-card">
+              <h3>Employee Attrition</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={attritionData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={95}
+                    label
+                  >
+                    {attritionData.map((entry, index) => (
+                      <Cell key={entry.name} fill={COLORS[index]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        </>
+      )}
+
+      <footer>HR Analytics Dashboard | React + FastAPI</footer>
     </div>
   );
 }
