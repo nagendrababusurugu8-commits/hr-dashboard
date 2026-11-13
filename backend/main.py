@@ -114,3 +114,77 @@ def filters():
         "job_roles": ["All"] + sorted(df["Job_Role"].dropna().astype(str).unique().tolist()),
         "attritions": ["All"] + sorted(df["Attrition"].dropna().astype(str).unique().tolist())
     }
+
+@app.get("/charts")
+def charts(
+    department: str = None,
+    gender: str = None,
+    job_role: str = None,
+    attrition: str = None
+):
+    data = filtered_data(department, gender, job_role, attrition)
+
+    # 1. Gender Distribution
+    gender_data = (
+        data["Gender"].value_counts()
+        .rename_axis("gender")
+        .reset_index(name="employees")
+        .to_dict(orient="records")
+    )
+
+    # 2. Attrition by Department
+    temp = data.copy()
+    temp["attrition_flag"] = (
+        temp["Attrition"].astype(str).str.strip().str.lower()
+        .isin(["yes", "1", "true"])
+    )
+
+    attrition_data = (
+        temp.groupby("Department")
+        .agg(
+            attrition=("attrition_flag", "sum"),
+            total=("attrition_flag", "count")
+        )
+        .reset_index()
+    )
+
+    attrition_data["active"] = (
+        attrition_data["total"] - attrition_data["attrition"]
+    )
+    attrition_data = attrition_data.rename(
+        columns={"Department": "department"}
+    )
+
+    # 3. Average Income by Department
+    income_data = data.copy()
+    income_data["Monthly_Income"] = pd.to_numeric(
+        income_data["Monthly_Income"], errors="coerce"
+    )
+
+    income_data = (
+        income_data.groupby("Department")["Monthly_Income"]
+        .mean()
+        .round(2)
+        .reset_index()
+        .rename(columns={
+            "Department": "department",
+            "Monthly_Income": "average_income"
+        })
+        .to_dict(orient="records")
+    )
+
+    # 4. Job Satisfaction
+    satisfaction_data = (
+        data["Job_Satisfaction"].value_counts()
+        .sort_index()
+        .rename_axis("satisfaction")
+        .reset_index(name="employees")
+        .to_dict(orient="records")
+    )
+
+    return {
+        "gender_distribution": gender_data,
+        "attrition_by_department": attrition_data.to_dict(orient="records"),
+        "income_by_department": income_data,
+        "job_satisfaction": satisfaction_data
+    }
