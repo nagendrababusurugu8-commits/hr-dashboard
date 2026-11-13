@@ -1,4 +1,4 @@
-
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -14,7 +14,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-df = None
+DATA_FILE = Path(__file__).parent / "HR_Dataset.csv"
+df = pd.read_csv(DATA_FILE) if DATA_FILE.exists() else None
 
 
 @app.get("/")
