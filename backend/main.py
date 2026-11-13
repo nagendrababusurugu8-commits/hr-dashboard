@@ -41,38 +41,76 @@ async def upload_csv(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/summary")
-def summary():
+def filtered_data(department=None, gender=None, job_role=None, attrition=None):
     if df is None:
         raise HTTPException(status_code=400, detail="Please upload CSV first")
 
-    total = len(df)
+    data = df.copy()
+
+    if department and department != "All":
+        data = data[data["Department"].astype(str) == department]
+
+    if gender and gender != "All":
+        data = data[data["Gender"].astype(str) == gender]
+
+    if job_role and job_role != "All":
+        data = data[data["Job_Role"].astype(str) == job_role]
+
+    if attrition and attrition != "All":
+        data = data[data["Attrition"].astype(str) == attrition]
+
+    return data
+
+
+@app.get("/summary")
+def summary(
+    department: str = None,
+    gender: str = None,
+    job_role: str = None,
+    attrition: str = None
+):
+    data = filtered_data(department, gender, job_role, attrition)
+
+    total = len(data)
     attrition_count = (
-        df["Attrition"].astype(str).str.strip().str.lower().isin(["yes", "1", "true"]).sum()
-        if "Attrition" in df.columns else 0
+        data["Attrition"].astype(str).str.strip().str.lower()
+        .isin(["yes", "1", "true"]).sum()
     )
 
-    average_income = (
-        round(pd.to_numeric(df["Monthly_Income"], errors="coerce").mean(), 2)
-        if "Monthly_Income" in df.columns else 0
-    )
+    average_income = pd.to_numeric(
+        data["Monthly_Income"], errors="coerce"
+    ).mean()
 
     return {
         "total_employees": total,
         "attrition": int(attrition_count),
-        "attrition_rate": round((attrition_count / total) * 100, 2) if total else 0,
-        "average_income": average_income
+        "attrition_rate": round(attrition_count / total * 100, 2) if total else 0,
+        "average_income": round(float(average_income), 2) if pd.notna(average_income) else 0
     }
 
 
 @app.get("/departments")
-def departments():
+def departments(
+    department: str = None,
+    gender: str = None,
+    job_role: str = None,
+    attrition: str = None
+):
+    data = filtered_data(department, gender, job_role, attrition)
+
+    result = data["Department"].value_counts().reset_index()
+    result.columns = ["department", "employees"]
+    return result.to_dict(orient="records")
+
+
+@app.get("/filters")
+def filters():
     if df is None:
         raise HTTPException(status_code=400, detail="Please upload CSV first")
 
-    if "Department" not in df.columns:
-        raise HTTPException(status_code=400, detail="Department column not found")
-
-    result = df["Department"].value_counts().reset_index()
-    result.columns = ["department", "employees"]
-    return result.to_dict(orient="records")
+    return {
+        "departments": ["All"] + sorted(df["Department"].dropna().astype(str).unique().tolist()),
+        "genders": ["All"] + sorted(df["Gender"].dropna().astype(str).unique().tolist()),
+        "job_roles": ["All"] + sorted(df["Job_Role"].dropna().astype(str).unique().tolist()),
+        "attritions": ["All"] + sorted(df["Attrition"].dropna().astype(str).unique().tolist())
+    }
