@@ -7,11 +7,19 @@ import {
 } from "recharts";
 
 const API = "https://hr-dashboard-fsan.onrender.com";
-const COLORS = ["#2563EB", "#F97316"];
+
+const COLORS = ["#2563EB", "#F97316", "#8B5CF6", "#10B981", "#EC4899"];
 
 function App() {
   const [summary, setSummary] = useState(null);
   const [departments, setDepartments] = useState([]);
+  const [charts, setCharts] = useState({
+    gender_distribution: [],
+    attrition_by_department: [],
+    income_by_department: [],
+    job_satisfaction: []
+  });
+
   const [options, setOptions] = useState({
     departments: ["All"],
     genders: ["All"],
@@ -33,8 +41,7 @@ function App() {
     try {
       const response = await fetch(`${API}/filters`);
       if (!response.ok) throw new Error("Unable to load filters");
-      const data = await response.json();
-      setOptions(data);
+      setOptions(await response.json());
     } catch (error) {
       setMessage(error.message);
     }
@@ -54,20 +61,23 @@ function App() {
       const query = params.toString();
       const suffix = query ? `?${query}` : "";
 
-      const [summaryResponse, departmentResponse] = await Promise.all([
+      const [summaryRes, departmentRes, chartsRes] = await Promise.all([
         fetch(`${API}/summary${suffix}`),
-        fetch(`${API}/departments${suffix}`)
+        fetch(`${API}/departments${suffix}`),
+        fetch(`${API}/charts${suffix}`)
       ]);
 
-      if (!summaryResponse.ok || !departmentResponse.ok) {
-        throw new Error("Unable to load dashboard data");
+      if (!summaryRes.ok || !departmentRes.ok || !chartsRes.ok) {
+        throw new Error("Unable to load dashboard data. Please refresh.");
       }
 
-      const summaryData = await summaryResponse.json();
-      const departmentData = await departmentResponse.json();
+      const summaryData = await summaryRes.json();
+      const departmentData = await departmentRes.json();
+      const chartsData = await chartsRes.json();
 
       setSummary(summaryData);
       setDepartments(departmentData);
+      setCharts(chartsData);
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -215,11 +225,7 @@ function App() {
                   <XAxis dataKey="department" />
                   <YAxis />
                   <Tooltip />
-                  <Bar
-                    dataKey="employees"
-                    fill="#3B82F6"
-                    radius={[6, 6, 0, 0]}
-                  />
+                  <Bar dataKey="employees" fill="#3B82F6" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -244,6 +250,80 @@ function App() {
                   <Tooltip />
                   <Legend />
                 </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="chart-card">
+              <h3>Gender Distribution</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={charts.gender_distribution}
+                    dataKey="employees"
+                    nameKey="gender"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label
+                  >
+                    {charts.gender_distribution.map((entry, index) => (
+                      <Cell
+                        key={entry.gender}
+                        fill={COLORS[index % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="chart-card">
+              <h3>Attrition by Department</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={charts.attrition_by_department}>
+                  <XAxis dataKey="department" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="active" name="Active" stackId="a" fill="#10B981" />
+                  <Bar dataKey="attrition" name="Attrition" stackId="a" fill="#F97316" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="chart-card">
+              <h3>Average Income by Department</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={charts.income_by_department}>
+                  <XAxis dataKey="department" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar
+                    dataKey="average_income"
+                    name="Average Income"
+                    fill="#8B5CF6"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="chart-card">
+              <h3>Job Satisfaction Analysis</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={charts.job_satisfaction}>
+                  <XAxis dataKey="satisfaction" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar
+                    dataKey="employees"
+                    name="Employees"
+                    fill="#0EA5E9"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </section>
