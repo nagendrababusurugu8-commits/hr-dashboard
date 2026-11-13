@@ -12,22 +12,55 @@ const COLORS = ["#2563EB", "#F97316"];
 function App() {
   const [summary, setSummary] = useState(null);
   const [departments, setDepartments] = useState([]);
+  const [options, setOptions] = useState({
+    departments: ["All"],
+    genders: ["All"],
+    job_roles: ["All"],
+    attritions: ["All"]
+  });
+
+  const [filters, setFilters] = useState({
+    department: "All",
+    gender: "All",
+    job_role: "All",
+    attrition: "All"
+  });
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [file, setFile] = useState(null);
 
-  async function loadDashboard() {
+  async function loadFilters() {
+    try {
+      const response = await fetch(`${API}/filters`);
+      if (!response.ok) throw new Error("Unable to load filters");
+      const data = await response.json();
+      setOptions(data);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function loadDashboard(selectedFilters = filters) {
     setLoading(true);
     setMessage("");
 
     try {
+      const params = new URLSearchParams();
+
+      Object.entries(selectedFilters).forEach(([key, value]) => {
+        if (value !== "All") params.append(key, value);
+      });
+
+      const query = params.toString();
+      const suffix = query ? `?${query}` : "";
+
       const [summaryResponse, departmentResponse] = await Promise.all([
-        fetch(`${API}/summary`),
-        fetch(`${API}/departments`)
+        fetch(`${API}/summary${suffix}`),
+        fetch(`${API}/departments${suffix}`)
       ]);
 
       if (!summaryResponse.ok || !departmentResponse.ok) {
-        throw new Error("Please upload the HR CSV file first.");
+        throw new Error("Unable to load dashboard data");
       }
 
       const summaryData = await summaryResponse.json();
@@ -42,47 +75,36 @@ function App() {
     }
   }
 
-  async function uploadCSV() {
-    if (!file) {
-      setMessage("Please select a CSV file.");
-      return;
-    }
+  function changeFilter(name, value) {
+    const updatedFilters = {
+      ...filters,
+      [name]: value
+    };
 
-    const formData = new FormData();
-    formData.append("file", file);
-
-    setLoading(true);
-    setMessage("");
-
-    try {
-      const response = await fetch(`${API}/upload`, {
-        method: "POST",
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.detail || "Upload failed.");
-      }
-
-      setMessage("CSV uploaded successfully!");
-      await loadDashboard();
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setLoading(false);
-    }
+    setFilters(updatedFilters);
+    loadDashboard(updatedFilters);
   }
 
   useEffect(() => {
-    loadDashboard();
+    loadFilters();
+    loadDashboard({
+      department: "All",
+      gender: "All",
+      job_role: "All",
+      attrition: "All"
+    });
   }, []);
 
   const attritionData = summary
     ? [
-        { name: "Active", value: summary.total_employees - summary.attrition },
-        { name: "Attrition", value: summary.attrition }
+        {
+          name: "Active",
+          value: summary.total_employees - summary.attrition
+        },
+        {
+          name: "Attrition",
+          value: summary.attrition
+        }
       ]
     : [];
 
@@ -96,26 +118,66 @@ function App() {
         <div className="header-tag">HR ANALYTICS</div>
       </header>
 
-      <section className="upload-card">
+      <section className="filters">
         <div>
-          <h3>Upload HR Dataset</h3>
-          <p>Select your HR CSV file to refresh the dashboard.</p>
+          <label>Department</label>
+          <select
+            value={filters.department}
+            onChange={(e) => changeFilter("department", e.target.value)}
+          >
+            {options.departments.map((item) => (
+              <option key={item} value={item}>
+                {item === "All" ? "All Departments" : item}
+              </option>
+            ))}
+          </select>
         </div>
-        <input
-          type="file"
-          accept=".csv"
-          onChange={(e) => setFile(e.target.files[0])}
-        />
-        <button onClick={uploadCSV} disabled={loading}>
-          {loading ? "Please wait..." : "Upload CSV"}
-        </button>
-        <button className="refresh-button" onClick={loadDashboard}>
-          Refresh
-        </button>
-        {message && <p className="message">{message}</p>}
+
+        <div>
+          <label>Gender</label>
+          <select
+            value={filters.gender}
+            onChange={(e) => changeFilter("gender", e.target.value)}
+          >
+            {options.genders.map((item) => (
+              <option key={item} value={item}>
+                {item === "All" ? "All Genders" : item}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label>Attrition</label>
+          <select
+            value={filters.attrition}
+            onChange={(e) => changeFilter("attrition", e.target.value)}
+          >
+            {options.attritions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label>Job Role</label>
+          <select
+            value={filters.job_role}
+            onChange={(e) => changeFilter("job_role", e.target.value)}
+          >
+            {options.job_roles.map((item) => (
+              <option key={item} value={item}>
+                {item === "All" ? "All Job Roles" : item}
+              </option>
+            ))}
+          </select>
+        </div>
       </section>
 
-      {loading && !summary && <p>Loading dashboard...</p>}
+      {message && <p className="message">{message}</p>}
+      {loading && <p>Updating dashboard...</p>}
 
       {summary && (
         <>
